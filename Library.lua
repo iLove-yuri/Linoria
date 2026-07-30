@@ -405,7 +405,7 @@ function IsValidCustomIcon(Icon: string)
 end
 
 function Library:GetIcon(IconName: string)
-    if not FetchIcons then
+    if not FetchIcons or not Icons then
         return
     end
 
