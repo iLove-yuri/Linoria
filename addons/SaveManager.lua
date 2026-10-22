@@ -6,6 +6,7 @@ local clonefunction = (clonefunction or copyfunction or function(func)
 end)
 
 local HttpService: HttpService = cloneref(game:GetService("HttpService"))
+local Players: Players = cloneref(game:GetService("Players"))
 local isfolder, isfile, listfiles = isfolder, isfile, listfiles;
 
 local assert = function(condition, errorMessage) 
@@ -376,12 +377,59 @@ local SaveManager = {} do
         return "none"
     end
 
+    function SaveManager:GetUserAutoloadPath()
+        local fileName = Players.LocalPlayer.Name .. "_autoload.txt"
+
+        local userAutoLoadPath = self.Folder .. "/settings/" .. fileName
+        if SaveManager:CheckSubFolder(true) then
+            userAutoLoadPath = self.Folder .. "/settings/" .. self.SubFolder .. "/" .. fileName
+        end
+
+        return userAutoLoadPath
+    end
+
+    function SaveManager:GetUserAutoloadConfig()
+        SaveManager:CheckFolderTree()
+
+        local userAutoLoadPath = self:GetUserAutoloadPath()
+
+        if isfile(userAutoLoadPath) then
+            local successRead, name = pcall(readfile, userAutoLoadPath)
+            if not successRead then
+                return "none"
+            end
+
+            name = tostring(name)
+            return if name == "" then "none" else name
+        end
+
+        return "none"
+    end
+
+    function SaveManager:SaveUserAutoloadConfig(name)
+        SaveManager:CheckFolderTree()
+
+        if (not name) then
+            return false, 'no config file is selected'
+        end
+
+        local success = pcall(writefile, self:GetUserAutoloadPath(), name)
+        if not success then return false, 'write file error' end
+
+        return true, ""
+    end
+
     function SaveManager:LoadAutoloadConfig()
         SaveManager:CheckFolderTree()
 
         local autoLoadPath = self.Folder .. "/settings/autoload.txt"
         if SaveManager:CheckSubFolder(true) then
             autoLoadPath = self.Folder .. "/settings/" .. self.SubFolder .. "/autoload.txt"
+        end
+
+        local userAutoLoadPath = self:GetUserAutoloadPath()
+        if isfile(userAutoLoadPath) then
+            autoLoadPath = userAutoLoadPath
         end
 
         if isfile(autoLoadPath) then
@@ -423,7 +471,22 @@ local SaveManager = {} do
             autoLoadPath = self.Folder .. "/settings/" .. self.SubFolder .. "/autoload.txt"
         end
 
+        if not isfile(autoLoadPath) then return true, "" end
+
         local success = pcall(delfile, autoLoadPath)
+        if not success then return false, 'delete file error' end
+
+        return true, ""
+    end
+
+    function SaveManager:DeleteUserAutoloadConfig()
+        SaveManager:CheckFolderTree()
+
+        local userAutoLoadPath = self:GetUserAutoloadPath()
+
+        if not isfile(userAutoLoadPath) then return true, "" end
+
+        local success = pcall(delfile, userAutoLoadPath)
         if not success then return false, 'delete file error' end
 
         return true, ""
@@ -513,6 +576,18 @@ local SaveManager = {} do
             self.Library:Notify(string.format('Set %q to auto load', name))
             self.AutoloadConfigLabel:SetText('Current autoload config: ' .. name)
         end)
+        section:AddButton('Set as user autoload', function()
+            local name = self.Library.Options.SaveManager_ConfigList.Value
+
+            local success, err = self:SaveUserAutoloadConfig(name)
+            if not success then
+                self.Library:Notify('Failed to set user autoload config: ' .. err)
+                return
+            end
+
+            self.Library:Notify(string.format('Set %q to auto load for %s', name, Players.LocalPlayer.Name))
+            self.UserAutoloadConfigLabel:SetText('Current user autoload config: ' .. name)
+        end)
         section:AddButton('Reset autoload', function()
             local success, err = self:DeleteAutoLoadConfig()
             if not success then
@@ -520,11 +595,19 @@ local SaveManager = {} do
                 return
             end
 
+            local userSuccess, userErr = self:DeleteUserAutoloadConfig()
+            if not userSuccess then
+                self.Library:Notify('Failed to set user autoload config: ' .. userErr)
+                return
+            end
+
             self.Library:Notify('Set autoload to none')
             self.AutoloadConfigLabel:SetText('Current autoload config: none')
+            self.UserAutoloadConfigLabel:SetText('Current user autoload config: none')
         end)
 
         self.AutoloadConfigLabel = section:AddLabel("Current autoload config: " .. self:GetAutoloadConfig(), true)
+        self.UserAutoloadConfigLabel = section:AddLabel("Current user autoload config: " .. self:GetUserAutoloadConfig(), true)
 
         -- self:LoadAutoloadConfig()
         self:SetIgnoreIndexes({ 'SaveManager_ConfigList', 'SaveManager_ConfigName' })
